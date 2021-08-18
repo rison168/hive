@@ -603,3 +603,115 @@ to the console)
    上述三种设定方式的优先级依次递增，即配置文件<命令行<参数声明。注意某些系统级的参数，例如log4j相关设定，必须用前两种方式设定，因为那些参数的读取在会话建立之前就已经完成了。
 
    
+
+### 三、Hive数据类型
+
+#### 3.1 基本类型
+
+![image-20210818211750824](pic/image-20210818211750824.png)
+
+![image-20210818211915603](pic/image-20210818211915603.png)
+
+对于Hive的string类型相当于数据库的varchar类型，该类型是一个可变的字符串，不过她可能声明其中最多能存储多少个字符，理论上可以存储2GB的字符数。
+
+#### 3.2 集合类型
+
+![image-20210818212158337](pic/image-20210818212158337.png)
+
+Hive有三种复杂数据类型Array/map和struct。array和map与java中的array和map类似。strcut与语言的struct类似，她封装了一个命名字段集合，复杂数据类型允许任意层次的嵌套。
+
+**案例**
+
+1. 假设某表如下一行，我们用哪个JSON格式来表示其数据结构。在Hive下访问格式为
+
+   ~~~json
+   {
+    "name": "songsong",
+    "friends": ["bingbing" , "lili"] , //列表 Array, 
+    "children": { //键值 Map,
+    "xiao song": 18 ,
+    "xiaoxiao song": 19
+    }
+    "address": { //结构 Struct,
+    "street": "hui long guan" ,
+    "city": "beijing" 
+    }
+   }
+   ~~~
+
+   
+
+2. 基于上述数据结构，我们在Hive创建对应的表，并导入数据。
+
+   ~~~shell
+   songsong,bingbing_lili,xiao song:18_xiaoxiao song:19,hui long 
+   guan_beijing
+   yangyang,caicai_susu,xiao yang:18_xiaoxiao yang:19,chao 
+   yang_beijing
+   ~~~
+
+   注意：map/struct/array里的元素都可以用同一个字符表示，这里用“_”
+
+3. Hive上创建测试表test
+
+   ~~~mysql
+   create table test(
+      name string,
+      friends array<string>,
+      children map<string, int>,
+      address struct<street:string, city:string>
+   )
+   row format delimited fields terminated by ','
+   collection items terminated by '_'
+   map keys terminated by ':'
+   lines terminated by '\n'
+   ~~~
+
+   字段解释：
+   row format delimited fields terminated by ',' -- 列分隔符
+   collection items terminated by '_' --MAP STRUCT 和 ARRAY 的分隔符(数据分割
+   符号)
+   map keys terminated by ':' -- MAP 中的 key 与 value 的分隔符
+   lines terminated by '\n'; -- 行分隔符
+
+4. 导入文本数据到测试表
+
+   ~~~shell
+   load data local inpath "/opt/module/datas/test.txt" into table test;
+   ~~~
+
+   
+
+5. 访问三种集合列里的数据，以下分别是Array,map,Struct的访问方式
+
+   ~~~shell
+   select friends[1],children["xiao song"],address.city from test
+   where name = "songsong";
+   OK
+   _c0 _c1 city_
+   lili 18 beijing
+   Time taken: 0.076 seconds, Fetched: 1 row(s)
+   ~~~
+
+
+
+#### 3.2 类型转化
+
+Hive 的原子数据类型是可以进行隐式转换的，类似于 Java 的类型转换，例如某表达式
+使用 INT 类型，TINYINT 会自动转换为 INT 类型，但是 Hive 不会进行反向转化，例如，
+某表达式使用 TINYINT 类型，INT 不会自动转换为 TINYINT 类型，它会返回错误，除非使
+用 CAST 操作。
+
+1. 隐式类型转换规则如下
+
+   * 任何整数类型都可以隐式地转换为一个范围更广的类型，如tinyint可以转换为int,int可以转换为bigint
+   * 所有整数类型、float和string类型都可以隐式地转换为Double.
+   * Tinying、smallint、int都可以转换为float
+   * boolean 类型不可以转换为任何其他类型。
+
+2. 可以使用cast操作显示数据类型转换
+
+   例如cast ('1' AS INT )将把字符串‘1’转换成整数1；如果强制转换类型失败，如执行cast('X' AS INT),表达式返回NULL。
+
+   
+
