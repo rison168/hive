@@ -1167,6 +1167,161 @@ hive> drop table dept_partition;
 
 
 
+### 五、DML数据操作
+
+#### 5.1 数据导入
+
+1. 向表中装载数据（load）
+
+   * 语法
+
+     hive> load data [local] inpath '/opt/module/datas/student.txt' [overwrite] | into table student
+     [partition (partcol1=val1,…)];
+     （1）load data:表示加载数据
+     （2）local:表示从本地加载数据到 hive 表；否则从 HDFS 加载数据到 hive 表
+     （3）inpath:表示加载数据的路径
+     （4）overwrite:表示覆盖表中已有数据，否则表示追加
+     （5）into table:表示加载到哪张表
+     （6）student:表示具体的表
+     （7）partition:表示上传到指定分区
+
+   * 实操
+
+     ~~~mysql
+     #（0）创建一张表
+     hive (default)> create table student(id string, name string) row 
+     format delimited fields terminated by '\t';
+     #（1）加载本地文件到 hive
+     hive (default)> load data local inpath 
+     '/opt/module/datas/student.txt' into table default.student;
+     #（2）加载 HDFS 文件到 hive 中
+     # 上传文件到 HDFS
+     hive (default)> dfs -put /opt/module/datas/student.txt 
+     /user/atguigu/hive;
+     # 加载 HDFS 上数据
+     hive (default)> load data inpath 
+     '/user/atguigu/hive/student.txt' into table default.student;
+     #（3）加载数据覆盖表中已有的数据
+     上传文件到 HDFS
+     hive (default)> dfs -put /opt/module/datas/student.txt 
+     /user/atguigu/hive;
+     # 加载数据覆盖表中已有的数据
+     hive (default)> load data inpath 
+     '/user/atguigu/hive/student.txt' overwrite into table 
+     default.student;
+     ~~~
+
+     
+
+2. 通过查询语句向标准功能插入数据（Insert）
+
+   ~~~mysqL
+   # 1．创建一张分区表
+   hive (default)> create table student(id int, name string) 
+   partitioned by (month string) row format delimited fields 
+   terminated by '\t';
+   # 2．基本插入数据
+   hive (default)> insert into table student 
+   partition(month='201709') values(1,'wangwu');
+   # 3．基本模式插入（根据单张表查询结果）
+   hive (default)> insert overwrite table student 
+   partition(month='201708')
+    select id, name from student where month='201709';
+   # 4．多插入模式（根据多张表查询结果）
+   hive (default)> from student
+    insert overwrite table student 
+   partition(month='201707')
+    select id, name where month='201709'
+    insert overwrite table student 
+   partition(month='201706')
+    select id, name where month='201709';
+   ~~~
+
+3. 查询语句中创建表并加载数据（AS select）
+
+   创建表
+
+   根据查询结果创建表
+
+   ~~~mysql
+   create table if not exists student3 as select id, name from student;
+   ~~~
+
+4. 创建表时通过location指定加载数据路径
+
+   ~~~mysql
+   # 1．创建表，并指定在 hdfs 上的位置
+   hive (default)> create table if not exists student5(
+    id int, name string
+    )
+    row format delimited fields terminated by '\t'
+    location '/user/hive/warehouse/student5';
+   # 2．上传数据到 hdfs 上
+   hive (default)> dfs -put /opt/module/datas/student.txt
+   /user/hive/warehouse/student5;
+   # 3．查询数据
+   hive (default)> select * from student5;
+   ~~~
+
+5. Import 数据到指定Hvie表中
+
+   ~~~mysql
+   hive (default)> import table student2 partition(month='201709') 
+   from
+   '/user/hive/warehouse/export/student';
+   ~~~
+
+#### 5.2 数据导出
+
+1. Insert导出
+
+   ~~~mysql
+   # 将查询结果导出到本地
+   hive(default) > insert overwrite local directory "/opt/module/datas/export/sturct" select * from student;
+   # 将查询结果格式化导出到本地
+   hive(default)> insert overwrite local directory '/opt/module/datas/export/student1' 
+   row format delimited fields terminated by '\t' select * from student;
+   # 将查询结果到处到HDFS（没有local）
+   hive(default) > insert overwrite directory '/user/rison/student2' row format delimited fields terminated by '\t' select * from student;
+   ~~~
+
+2. Hadoop命令导出到本地
+
+   ~~~mysql
+   hive(default) > dfs -get /user/hive/warehouse/student/month=20200811/000000_0
+   /opt/module/datas/export/export/student3.txt
+   ~~~
+
+3. Hive Shell 命令导出
+
+   ~~~mysql
+   bin/hive -e 'select * from default.student;' > /opt/moudle/datas/export/student4.txt;
+   ~~~
+
+4. Export导出到HDFS
+
+   ~~~mysql
+   export table default.student to '/user/hive/warehouse/export/student';
+   ~~~
+
+5. Sqoop导出
+
+   
+
+#### 5.3 清除表中数据（truncate）
+
+~~~mysql
+hive> truncate table student;
+~~~
+
+
+
+
+
+
+
+
+
 
 
 
