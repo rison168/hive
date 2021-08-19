@@ -665,6 +665,7 @@ Hive有三种复杂数据类型Array/map和struct。array和map与java中的arra
    collection items terminated by '_'
    map keys terminated by ':'
    lines terminated by '\n'
+   
    ~~~
 
    字段解释：
@@ -1316,13 +1317,172 @@ hive> truncate table student;
 
 
 
+### 六、查询
 
+htts://cwiki.aache.or/confluence/disla/Hive/LanuaeManual+Select
 
+查询语法：
 
+~~~mysql
+[WITH CommonTableExpression (, CommonTableExpression)*] (Note: 
+Only available
+starting with Hive 0.13.0)
+SELECT [ALL | DISTINCT] select_expr, select_expr, ...
+FROM table_reference
+[WHERE where_condition]
+[GROUP BY col_list]
+[ORDER BY col_list]
+[CLUSTER BY col_list
+| [DISTRIBUTE BY col_list] [SORT BY col_list]
+]
+[LIMIT number]
+~~~
 
+#### 6.1 基本查询
 
+1. 全表查询
 
+   ~~~mysql
+   hive> select * from emp;
+   ~~~
 
+2. 选择特定列查询
 
+   ~~~mysql
+   hive> select empno, ename from emp;
+   ~~~
 
+   注意：
+
+   （1）SQL语言大小写不敏感
+
+   （2）SQL可以写一行或者多行
+
+   （3）关键字不能缩写也不能分析
+
+   （4）各个子句一般要分行写
+
+   （5）使用缩进提高语句的可读性。
+
+3. 列别名
+
+   * 重命名一个列
+
+   * 便于计算
+
+   * 紧跟列名，可以在列名和别名中间加入关键子‘‘AS’’
+
+   * 案例
+
+     查询名称和部门
+
+     ~~~mysql
+     hive> select ename AS name, deptno dn from emp;
+     ~~~
+
+4. 算术运算符
+
+   ![image-20210819143356548](pic/image-20210819143356548.png)
+
+   ![image-20210819143428121](pic/image-20210819143428121.png)
+
+   ~~~mysql
+   select sal +1 from emp;
+   ~~~
+
+5. 常用函数
+
+   ~~~mysql
+   # 求总行数(count)
+   select count(*) cnt from emp;
+   # 求工资最大值(max)
+   select max(sal) max_sal from emp;
+   # 求工资最小值(min)
+   select min(sal) mix_sal from emp;
+   # 求工资总和(sum)
+   select sum(sal) sum_sal from emp;
+   #求工资平均值（avg）
+   select avg(sal) avg_sal from emp;
+   ~~~
+
+6. Limit语句
+
+   典型的查询会返回多行数据。Limit子句用于限制返回的行数。
+
+   ~~~mysql
+   hive> select * from emp limit 5;
+   ~~~
+
+#### 6.2 where语句
+
+1. 使用后where子句，将不满足条件的行过滤掉
+
+2. where子句仅随from子句
+
+3. 案例
+
+   查询薪水大于1000的所有员工
+
+   ~~~mysql
+   hive> select * from emp where sal > 1000;
+   ~~~
+
+##### 比较运算符（between / in / is null）
+
+下面表中描述了谓词操作符，这些操作符，这些操作符同样可以用于JOIN...ON 和Having语句中。
+
+![image-20210819144630530](pic/image-20210819144630530.png)
+
+![image-20210819144642541](pic/image-20210819144642541.png)
+
+案例实操
+
+~~~mysql
+# 查询薪水等于5000的所有员工
+hive> select * from emp where sal = 5000;
+# 查询薪水在500到1000员工
+hive> select * from emp where sal between 500 and 1000;
+# 查询comm为空的所有员工信息
+hive> select * from emp where comm is null;
+# 查询薪水是1500或5000的员工
+hive> select * from emp where sal IN(1500, 5000);
+~~~
+
+##### like 和 rlike
+
+1. 使用like运算选择类似的值
+
+2. 选择条件可以包含字符或者数字：
+
+   % 代表零个或者多个字符（任意字符）
+
+   _ 代表一个字符。
+
+3. RLike子句是Hive中这个功能的一个扩展，其可以通过Java的正则 表达式更强大的语言来指定匹配条件。
+
+4. 案例
+
+   ~~~mysql
+   (1) 查找以2位开头薪水的员工信息
+   hive> select * from emp where sal like '2%'
+   (2) 查找第二个数值为2的薪水员工信息
+   hive> select * from emp where sal like '_2%'
+   (3)查找薪水中含有2的员工信息
+   hive> select * from emp where sal Rlike '[2]';
+   ~~~
+
+##### 逻辑运算符（and、or、not）
+
+![image-20210819155526104](pic/image-20210819155526104.png)
+
+实例
+
+~~~MYSQL
+（1）查询薪水大于1000，部门是30
+select * from emp where sal > 1000 and deptno =30;
+（2）查询薪水大于1000，或者部门是30
+select * from emp where sal > 1000 or deptno=30;
+（3）查询除了20部门和30部门以外的员工信息
+select * from emp where depton not in (30,20);
+~~~
 
