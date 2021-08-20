@@ -1486,3 +1486,500 @@ select * from emp where sal > 1000 or deptno=30;
 select * from emp where depton not in (30,20);
 ~~~
 
+#### 6.3 分组
+
+1. group by 语句
+
+   group by 语句通常会和聚合函数一起使用，按照一个或者多个列队结果进行分组，然后队每个组执行聚合操作。
+
+   案例实操：
+
+   ~~~mysql
+   # 计算emp每个部门的平均工资
+   hive> select t.deptno, avg(t.sal) avg_sql from emp t group by t.deptno;
+   # 计算emp每个部门中每个岗位的最高薪水
+   hive> select t.depton, t.job, max(t.sal) max_sal from emp t group by t.deptno, t.job;
+   ~~~
+
+2. having 语句
+
+   * having与where不同点
+
+     （1）where针对表中的列发挥作用，查询数据：having针对查询结果中的列发挥作用，筛选数据。
+
+     （2）where后面不能写聚合函数，而having后面可以使用聚合函数。
+
+     （3）having只用于group by 分组统计语句。
+
+   * 案例
+
+     ~~~mysql
+     # 求每个部门的平均工资
+     select deptno, avg(sal) from emp group by deptno;
+     # 每个部门的平均薪水大于2000的部门
+     select deptno, avg(sal) from emp group by deptno having avg_sal > 2000;
+     ~~~
+
+#### 6.4 Join语句
+
+1. 等值Join
+
+   Hive 支持通常的sql join 语句，但是支持等值连接，不支持非等值连接
+
+   案例实操
+
+   ~~~mysql
+   # 根据员工表和部门表中的部门编号相等，查询员工编号、员工名称和部门名称
+   select e.empno,e.ename,d.deptno,d.dname from emp e join dept d on e.deptno = d.deptno
+   ~~~
+
+2. 表的别名
+
+   使用别名可以简化查询，使用表名前缀可以提高执行效率。
+
+   
+
+3. 内连接： 只有进行连接的两个表都存在与连接条件相匹配的数据才会保留下来。
+
+   ~~~mysql
+   hive> select e.empno,e.ename,d.deptno from emp e join dept d on e.deptno = d.deptno;
+   ~~~
+
+4. 左外连接
+
+   JOIN操作符左边表中符合where子句的所有记录将会被返回。
+
+   ~~~mysql
+   hive (default)> select e.empno, e.ename, d.deptno from emp e left join dept d on e.deptno = d.deptno;
+   ~~~
+
+5. 右外连接
+
+   右外连接：JOIN 操作符右边表中符合 WHERE 子句的所有记录将会被返回。
+
+   ~~~mysql
+   hive (default)> select e.empno, e.ename, d.deptno from emp e right join dept d on e.deptno = d.deptno;
+   ~~~
+
+6. 满外连接
+
+7. 满外连接：将会返回所有表中符合 WHERE 语句条件的所有记录。如果任一表的指定
+   字段没有符合条件的值的话，那么就使用 NULL 值替代。
+
+   ~~~mysql
+    select e.empno, e.ename, d.deptno from emp e full join dept d on e.deptno = d.deptno;
+   ~~~
+
+8. 多表连接
+
+   注意：连接 n 个表，至少需要 n-1 个连接条件。例如：连接三个表，至少需要两个连
+   接条件。
+
+   ~~~mysql
+   # 数据准备
+   # 创建位置表
+   create table if not exists default.location(
+   loc int,
+   loc_name string
+   )
+   row format delimited fields terminated by '\t';
+   # 导入数据
+   load data local inpath '/opt/module/data/location.txt' into table default.location;
+   # 多表连接查询
+   >SELECT e.ename, d.deptno, l.loc_nameFROM emp e 
+   JOIN dept d ON d.deptno = e.deptno
+   JOIN location l ON d.loc = l.loc;
+   ~~~
+
+   大多数情况下，Hive 会对每对 JOIN 连接对象启动一个 MapReduce 任务。本例中会首
+   先启动一个 MapReduce job 对表 e 和表 d 进行连接操作，然后会再启动一个 MapReduce job
+   将第一个 MapReduce job 的输出和表 l;进行连接操作
+
+   注意：为什么不是表 d 和表 l 先进行连接操作呢？这是因为 Hive 总是按照从左到右的
+   顺序执行的。
+
+9. 笛卡尔积
+
+   * 笛卡尔积会在下面条件产生
+
+     * 省略连接条件
+     * 连接条件无效
+     * 所有表中的所有行互相连接
+
+   * 案例
+
+     ~~~mysql
+     hive (default)> select empno, dname from emp, dept;
+     ~~~
+
+10. 连接谓词中不支持or
+
+    ~~~mysql
+    hive (default)> select 
+     > e.empno,
+     > e.ename,
+     > d.deptno
+     > from
+     > emp e 
+     > join
+     > dept d 
+     > on
+     > e.deptno=d.deptno or e.ename=d.dname;
+    FAILED: SemanticException [Error 10019]: Line 10:3 OR not 
+    supported in JOIN currently 'dname'
+    ~~~
+
+#### 6.5 排序
+
+##### 全局排序
+
+1. 全局排序（order By）
+
+   Order By: 全局排序，一个Reducer
+
+   使用order by 子句排序
+
+   ASC(ascend) ： 升序（默认）
+
+   DESC(descend): 降序 
+
+2. order by 子句在select语句的结尾
+
+3. 案例实操
+
+   ~~~mysql
+   # 查询员工信息按工资升序排列
+   hive(default)> select * from emp order by sal;
+   # 查询员工信息按工资降序排列
+   hive(default)> select * from emp order by sal desc;
+   ~~~
+
+##### 按照别名排序
+
+~~~sql
+# 按照员工薪水的2倍排序
+hive(default) > select ename, sal * 2 twosal from emp order by twosal;
+~~~
+
+##### 多个列排序
+
+~~~mysql
+# 按照部门和工资升序排序
+hive(default) > select ename, deptno, sal from emp order by deptno, sal;
+~~~
+
+##### 每个MapReduce内部排序（Sort by）
+
+Sort By: 每个Reducer内部进行排序，对全局结果集来说不是排序。
+
+~~~mysql
+# 1. 设置reduce个数
+hive > set mapreduce.job.reduces=2;
+# 2. 查看设置reduce个数
+hive > set mapreduce.job.reduces;
+# 3.根据部门编号降序查看员工信息
+hive > select * from emp sort by empno desc;
+# 4.将查询结果导入到文件中（按照部门编号降序排序）
+hive > insert overwrite local directory '/opt/module/datas/sortby-result'
+select * from emp sort by deptno desc;
+~~~
+
+##### 分区排序（Distribute By）
+
+distribute by: 类似MR中的partition，进行分区，结合sort by  使用。
+
+注意：hive 要求Distribute by 语句要写在sort by语句之前。
+
+对于distribute by 进行测试，一定要分配多个reduce 进行处理，否则无法看到distribute by 结果。
+
+~~~mysql
+# （1） 先按照部门编号分区，再按照员工编号降序排序
+hive > set mapreduce.job.reduces=3;
+hive > insert overwrite local directory '/opt/module/datas/disribute-result' select * from emp distribute by deptno sort by empno desc;
+
+~~~
+
+##### Cluster By
+
+当distribute by 和 sorts by 字段相同时，可以使用cluster by方式。
+
+cluter by 除了具有distribute by 的功能外还兼具sort by 的功能，但是排序只能是升序排序，不能指定排序规则为ASC或者DESC.
+
+1) 以下两种写法等价
+
+~~~mysql
+hive > select * from emp cluster by deptno;
+hive > select * from emp distribute by deptno sort by deptno;
+~~~
+
+##### 
+
+#### 6.6 分桶及抽样查询
+
+##### 分桶表数据存储
+
+分区针对的是数据的存储路径；分桶针对的是数据文件。
+
+分区提供一个隔离数据和优化查询的便利方式。不过，并非所有的数据集都可形成合理的分区，特别是之前提到的要确定合适的划分大小这个疑虑。
+
+分桶是将数据集分解成更容易管理的若干部分的另一个技术。
+
+1. 先创建分桶表，通过直接导入数据文件的方式。
+
+   ~~~mysql
+   # 数据准备
+   # 创建分桶表
+   create table stu_buck(id int, name string)
+   clustered by (id) into 4 buckets
+   row format delimited fields terminated by '\t'
+   # 查看表结构
+   hive > desc formatted stu_buck;
+   Num Buckets: 4
+   # 导入数据到分桶表
+   hive > load data local inpath '/opt/module/datas/student.txt' into table stu_buck;
+   ~~~
+
+   ![image-20210820150211315](pic/image-20210820150211315.png)
+
+2. 创建分桶表时，数据通过子查询的方式导入。
+
+   ~~~mysql
+   # 先建一个普通的stu表
+   create table stu(id int, name string)
+   row format delimited fields terminated by '\t';
+   # 向普通的stu表中导入数据
+   load data local inpath '/opt/module/datas/student.txt' into table stu;
+   # 清空stu_buck 表中数据
+   truncate table stu_buck;
+   select * from stu_buck;
+   # 导入数据到分桶表，通过子查询的方式
+   insert into table stu_buck
+   select id, name, from stu;
+   ~~~
+
+   ![image-20210820150630156](pic/image-20210820150630156.png)
+
+   ~~~mysql
+   # 需要设置一个属性
+   hive > set hive.enforce.bucketing=true;
+   hive > set mapreduce.job.reduces=-1;
+   hive > insert into table stu_buck select id ,name from stu;
+   hive (default)> select * from stu_buck;
+   OK
+   stu_buck.id stu_buck.name
+   1004 ss4
+   1008 ss8
+   1012 ss12
+   1016 ss16
+   1001 ss1
+   1005 ss5
+   1009 ss9
+   1013 ss13
+   1002 ss2
+   1006 ss6
+   1010 ss10
+   1014 ss14
+   1003 ss3
+   1007 ss7
+   1011 ss11
+   1015 ss15
+   ~~~
+
+   ![image-20210820150842598](pic/image-20210820150842598.png)
+
+   
+
+##### 分桶抽样查询
+
+对于非常大的数据集，有时用户需要使用的是一个具有代表性的查询结果而不是全部结果。hive可以通过对表激进行抽样来满足这个需求。
+
+查询表stu_buck 中的数据。
+
+~~~mysql
+hive > select * from stu_buck tablesample(bucket 1 out of 4 on id);
+~~~
+
+注：tablesample 是抽样语句，语法：TABLESAMPLE(BUCKET x OUT OF y) 。
+y 必须是 table 总 bucket 数的倍数或者因子。hive 根据 y 的大小，决定抽样的比例。例如，table 总共分了 4 份，当 y=2 时，抽取(4/2=)2 个 bucket 的数据，当 y=8 时，抽取(4/8=)1/2个 bucket 的数据。
+x 表示从哪个 bucket 开始抽取，如果需要取多个分区，以后的分区号为当前分区号加上y。例如，table 总 bucket 数为 4，tablesample(bucket 1 out of 2)，表示总共抽取（4/2=）2 个bucket 的数据，抽取第 1(x)个和第 3(x+y)个 bucket 的数据。注意：x 的值必须小于等于 y 的值，否则
+FAILED: SemanticException [Error 10061]: Numerator should not be bigger than 
+denominator in sample clause for table stu_buck
+
+#### 6.7其他常用查询函数
+
+1. 空字段赋值
+
+   NVL: 给值为NULL的数据赋值，他的格式是NVL(string, replace_with)。他的功能是如果string为null,则NVL函数返回replace_with的值，否则返回string的值，如果两个参数都为NULL,则返回NULL。
+
+   ~~~mysql
+   # 查询：如果员工的 comm 为 NULL，则用-1 代替
+   hive (default)> select nvl(comm,-1) from emp;
+   OK
+   _c0
+   20.0
+   300.0
+   500.0
+   -1.0
+   1400.0
+   -1.0
+   -1.0
+   -1.0
+   -1.0
+   0.0
+   -1.0
+   -1.0
+   -1.0
+   -1.0
+   # 查询：如果员工的 comm 为 NULL，则用领导 id 代替
+   hive (default)> select nvl(comm,mgr) from emp;
+   OK
+   _c0
+   20.0
+   300.0
+   500.0
+   7839.0
+   1400.0
+   7839.0
+   7839.0
+   ~~~
+
+2. 时间类
+
+   ~~~mysql
+   # 1）date_format:格式化时间
+   hive (default)> select date_format('2019-06-29','yyyy-MM-dd');
+   OK
+   _c0
+   2019-06-29
+   # 2）date_add:时间跟天数相加
+   hive (default)> select date_add('2019-06-29',5);
+   OK
+   _c0
+   2019-07-04
+   hive (default)> select date_add('2019-06-29',-5);
+   OK
+   _c0
+   2019-06-24
+   # 3）date_sub:时间跟天数相减
+   hive (default)> select date_sub('2019-06-29',5);
+   OK
+   _c0
+   2019-06-24
+   hive (default)> select date_sub('2019-06-29 12:12:12',5);
+   OK
+   _c0
+   2019-06-24
+   hive (default)> select date_sub('2019-06-29',-5);
+   OK
+   _c0
+   2019-07-04
+   # 4）datediff:两个时间相减
+   hive (default)> select datediff('2019-06-29','2019-06-24');
+   OK
+   _c0
+   5
+   hive (default)> select datediff('2019-06-24','2019-06-29');
+   OK
+   _c0
+   -5
+   hive (default)> select datediff('2019-06-24 12:12:12','2019-06-29');
+   OK
+   _c0
+   -5
+   hive (default)> select datediff('2019-06-24 12:12:12','2019-06-29 
+   13:13:13');
+   OK
+   _c0
+   -5
+   ~~~
+
+   
+
+3. case when
+
+   1. 
+
+   ~~~mysql
+   # 求出不同部门男女各多少人。结果如下：
+   A 2 1
+   B 1 2
+   # 3．创建本地 emp_sex.txt，添加数据
+   # 4．创建 hive 表并导入数据
+   create table emp_sex(
+   name string, 
+   dept_id string, 
+   sex string) 
+   row format delimited fields terminated by "\t";
+   load data local inpath '/opt/module/data/emp_sex.txt' into table 
+   emp_sex;
+   # 5．按需求查询数据
+   select 
+    dept_id,
+    sum(case sex when '男' then 1 else 0 end) male_count,
+    sum(case sex when '女' then 1 else 0 end) female_count
+   from 
+    emp_sex
+   group by
+    dept_id;
+   ~~~
+
+   
+
+4. 列转行
+
+   * concat(string A/col, string B/col *** ) ：返回输入字符串连接后的结果，支持任意输入字符串；
+
+   * concat_ws(separator, str1, str2 ***) : 他是一个特殊形式的CONCAT()。第一个参数剩余参数间的分隔符。分隔符可以是与剩余参数一样的字符串。如果分隔符是NULL，返回值也将被NULL。这个函数会跳过过分分隔符参数的任何NULL和空字符串。分隔符将被加到被连接的字符串之间；
+
+   * collect_set(col): 函数只接受基本数据类型，他的主要作用是将某个字段你的值进行去重汇总，产生array类型字段。
+
+     ![image-20210820153638959](pic/image-20210820153638959.png)
+
+     ~~~mysql
+     # 4．创建本地 constellation.txt，导入数据
+     [atguigu@hadoop102 datas]$ vi constellation.txt
+     孙悟空 白羊座 A
+     大海 射手座 A
+     宋宋 白羊座 B
+     猪八戒 白羊座 A
+     凤姐 射手座 A
+     # 5．创建 hive 表并导入数据
+     create table person_info(
+     name string, 
+     constellation string, 
+     blood_type string) 
+     row format delimited fields terminated by "\t";
+     load data local inpath "/opt/module/data/person_info.txt" into 
+     table person_info;
+     # 6．按需求查询数据
+     select t1.base, concat_ws('|', collect_set(t1.name)) name
+     from 
+     (select name, concat(constellation, ",", blood_type) base
+     from person_info ) t1
+     group by t1.base;
+     ~~~
+
+     
+
+5. 行转列
+
+   EXPLODE(col)：将 hive 一列中复杂的 array 或者 map 结构拆分成多行。
+   LATERAL VIEW
+   用法：LATERAL VIEW udtf(expression) tableAlias AS columnAlias
+   解释：用于和 split, explode 等 UDTF 一起使用，它能够将一列数据拆成多行数据，在此
+   基础上可以对拆分后的数据进行聚合
+
+   ![image-20210820155423637](pic/image-20210820155423637.png)
+
+   ~~~mysql
+   SELECT myCol1, myCol2 FROM baseTable
+       LATERAL VIEW explode(col1) myTable1 AS myCol1
+       LATERAL VIEW explode(col2) myTable2 AS myCol2;
+   ~~~
+
+   ![image-20210820155442666](pic/image-20210820155442666.png)
+
+6. 
+
+
+
