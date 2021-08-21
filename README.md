@@ -1979,7 +1979,68 @@ denominator in sample clause for table stu_buck
 
    ![image-20210820155442666](pic/image-20210820155442666.png)
 
-6. 
+6. 窗口函数
+
+   相关函数说明：
+
+   over(): 指定分析函数工作的数据窗口大小，这个数据大小可能会随着行数的变化而变化。
+
+   current row: 当前行；
+
+   n preceding: 往前n行数据
+
+   n following: 往后n行数据
+
+   unbounded:起点，unbounded preceding 表示从前面的起点，unbounded following 表示后面的起点；
+
+   lag(col, n): 往前第n行数据
+
+   lead(col, n): 往后第n行数据
+
+   ntile(n): 把有序分区中的行分发到指定的数据的组中，各个组有编号，编号从1开始，对于每一行，ntile返回所属租的编号，注意：必须为int类型。
+
+   ~~~mysql
+   # 数据准备
+   name orderdate cost
+   jack,2017-01-01,10
+   tony,2017-01-02,15
+   jack,2017-02-03,23
+   tony,2017-01-04,29
+   jack,2017-01-05,46
+   jack,2017-04-06,42
+   tony,2017-01-07,50
+   jack,2017-01-08,55
+   mart,2017-04-08,62
+   # 查询2017年4月份购买过的顾客及总人数
+   select name，count(*) over ()
+   from business
+   where substring(orderdata, 1, 7) = '2017-04'
+   group by name;
+   # 查询顾客的购买明细及月购买总额
+   select name, orderdate, cost, sum(cost) over(partition by month（orderdate）)
+   from business;
+   # 上述的场景，要将cost按照日期进行累加
+   select name, orderdate, cost, 
+   sum(cost) over() as sample1, -- 所有行相加
+   sum(cost) over(partition by name) as sample2, -- 按name分组，组内相加
+   sum(cost) over(partition by name order by orderdate) as sample3, -- 按name分组，组内数据累加
+   sum(cost) over(partition by name order by orderdate rows between unbounded preceding and current row) as sample4, -- sample3 一样，由起点到当前行的聚合
+   sum(cost) over(partition by name order by orderdate rows between 1 preceding and current row) as sample5, -- 当前行和前面一行做聚合
+   sum（cost） over(partition by name order by orderdate rows between 1 preceding and 1 following) as sample6, -- 当前行和前边一行和后面一行
+   sum(cost) over(partition by name order by order by orderdate rows between current row  and unbouned following) as sample7 -- 当前行到后面所有行
+   from bussiness;
+   # 查看顾客上次的购买时间
+   select name，orderdate, cost, lag(orderdate, 1, '1900-01-01') over(partition by name order by orderdate ) as time1, lag(orderdate, 2) over(partition by name order by orderdate) as time2
+   from business;
+   # 查询前20%时间的订单信息
+   select * from (
+   select name, orderdate,cost,ntile(5) over(order by orderdate) sorted
+       from business
+   )t
+   where sorted = 1;
+   ~~~
+
+   
 
 
 
