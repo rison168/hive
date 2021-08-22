@@ -2040,7 +2040,231 @@ denominator in sample clause for table stu_buck
    where sorted = 1;
    ~~~
 
+7. Rank
+
+   1. 函数说明
+
+      Rank() 排序相同时会重复，总数不会变。
+
+      dense_rank() 排序相同时会重复，总数会减少
+
+      row_number()会根据顺序计算
+
+   ![image-20210822132314189](pic/image-20210822132314189.png)
+
+   ~~~mysql
+   # 计算每门学科成绩排名
+   select name,subject,score, rank() over(partition by subject order by score desc) rp,
+   dense_rank() over (partition by subject order by score desc) drp,
+   row_number() over(partition by subject order by score desc) rmp
+   from score;
    
+   name subject score rp drp rmp
+   孙悟空 数学 95 1 1 1
+   宋宋 数学 86 2 2 2
+   婷婷 数学 85 3 3 3
+   大海 数学 56 4 4 4
+   宋宋 英语 84 1 1 1
+   大海 英语 84 1 1 2
+   婷婷 英语 78 3 2 3
+   孙悟空 英语 68 4 3 4
+   大海 语文 94 1 1 1
+   孙悟空 语文 87 2 2 2
+   婷婷 语文 65 3 3 3
+   宋宋 语文 64 4 4 4
+   ~~~
+
+
+
+
+
+### 七、函数
+
+#### 7.1系统内置函数
+
+~~~mysql
+# 查看系统自带函数
+show functions;
+# 显示自带的函数的用法
+desc function upper;
+# 详细显示自带的函数的用法
+desc function extended upper;
+
+~~~
+
+#### 7.2 自定义函数
+
+1） Hive 自带了一些函数，比如：max/min等，但是数量有限，自己可以通过自定义函数UDF来方便扩展。
+
+2） 当Hive提供的内置函数无法满足你的业务处理需求时，此时可以考虑使用用户自定义函数（UDF: user-defined function）
+
+3)  根据用户自定义函数类别可以分为以下三种：
+
+* UDF
+
+  一进一出
+
+* UDAF（user-defined aggregation function）
+
+  聚集函数，多进一出
+
+  类似count/max/min
+
+* UDTF(user-defined table-generatiing funtions)
+
+  一进多出
+
+  如 lateral explore()
+
+4)  官方文档
+
+https://cwiki.apache.org/confluence/display/Hive/HivePlugins
+
+5）编程步骤
+
+~~~mysql
+# 1 继承org.apache.hadoop.hive.ql.UDF
+# 2 需要实现evaluate函数；evaluate函数支持重载
+# 3 在hive的命令行窗口创建函数
+  -- 添加jar
+  add jar linux_jar_path
+  -- 创建 function
+  create [temporary] function [dbname.]function_name as class_name;
+# 4 在hive的命令窗口删除函数
+drop [temporary] function [if exists][dbname.]function_name;
+~~~
+
+6）注意事项
+
+（1） UDF必须要返回类型，可以返回null, 但是返回类型不能为void
+
+**自定义UDF函数**
+
+1. 创建一个maven工程hive
+
+2. 导入依赖
+
+   ~~~xml
+   <dependencies>
+   <!--https://mvnrepository.com/artifact/org.apache.hive/hive-exec -->
+       <dependency>
+       <groupId>org.apache.hive</groupId>
+       <artifactId>hive-exec</artifactId>
+       <version>1.2.1</version>
+       </dependency>
+   </dependencies>
+   ~~~
+
+3. 创建一个类
+
+   ~~~java
+   
+   package com.atguigu.hive;
+   import org.apache.hadoop.hive.ql.exec.UDF;
+   public class Lower extends UDF {
+       public String evaluate (String s) {
+       if (s == null) {
+       return null;	
+       }
+       return s.toLowerCase();
+       }
+   }
+   ~~~
+
+4. 打包成jar包上传到服务器/opt/module/datas/udf.jar
+
+5. 将jar包添加到hive的classpath
+
+   ~~~mysql
+   hive > add jar /opt/module/datas/udf.jar;
+   ~~~
+
+6. 创建临时函数与开发好的java class 关联
+
+   ~~~mysql
+   hive > create temporary function mylower as "com.atguigu.hive.lower"
+   ~~~
+
+7. 即可以在hql中使用自定义函数
+
+   hive > select ename, mylower(ename) lowername from emp;
+
+**自定义UDTF函数**
+
+~~~java
+# 1）需求说明
+自定义一个 UDTF 实现将一个任意分割符的字符串切割成独立的单词，例如
+Line:"hello,world,hadoop,hive"
+Myudtf(line, ",")
+hello
+world
+hadoop
+hive
+# 2）代码实现
+package com.atguigu.udtf;
+import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
+import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDTF;
+import 
+org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
+import 
+org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorFact
+ory;
+import 
+org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspect
+or;
+import 
+org.apache.hadoop.hive.serde2.objectinspector.primitive.Primitive
+ObjectInspectorFactory;
+import java.util.ArrayList;
+import java.util.List;
+public class MyUDTF extends GenericUDTF {
+ private ArrayList<String> outList = new ArrayList<>();
+ @Override
+ public StructObjectInspector initialize(StructObjectInspector 
+argOIs) throws UDFArgumentException {
+ //1.定义输出数据的列名和类型
+ List<String> fieldNames = new ArrayList<>();
+ List<ObjectInspector> fieldOIs = new ArrayList<>();
+ //2.添加输出数据的列名和类型
+ fieldNames.add("lineToWord");
+ 
+fieldOIs.add(PrimitiveObjectInspectorFactory.javaStringObjectInsp
+ector);
+ return 
+ObjectInspectorFactory.getStandardStructObjectInspector(fieldName
+s, fieldOIs);
+ }
+ @Override
+ public void process(Object[] args) throws HiveException {
+ 
+ //1.获取原始数据
+ String arg = args[0].toString();
+ //2.获取数据传入的第二个参数，此处为分隔符
+ String splitKey = args[1].toString();
+ //3.将原始数据按照传入的分隔符进行切分
+ String[] fields = arg.split(splitKey);
+ //4.遍历切分后的结果，并写出
+ for (String field : fields) {
+ //集合为复用的，首先清空集合
+ outList.clear();
+ //将每一个单词添加至集合
+ outList.add(field);
+ //将集合内容写出
+ forward(outList);
+ }
+ }
+ @Override
+ public void close() throws HiveException {
+ }
+}
+~~~
+
+
+
+
+
+
 
 
 
