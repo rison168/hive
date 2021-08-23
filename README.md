@@ -2264,7 +2264,147 @@ s, fieldOIs);
 
 
 
+### 九、调优
 
+#### 9.1 Fetch抓取
+
+fetch 抓取是指，Hive 中对某些情况的查询可以不必使用mapreduce计算，例如：select * from emp,在这种情况下，hive可以简单地读取emp对应的存储目录下的文件，然后查询结果到控制台。
+
+在hive-default.xml.template文件中，hive.fetch.taskconversion默认more,老版本是minmal,该属性改为more以后，在全局查找、字段查找、limit查找都不走mapreduce.
+
+~~~xml
+<property>
+ <name>hive.fetch.task.conversion</name>
+ <value>more</value>
+ <description>
+ Expects one of [none, minimal, more].
+ Some select queries can be converted to single FETCH task 
+minimizing latency.
+ Currently the query should be single sourced not having any 
+subquery and should not have
+      any aggregations or distincts (which incurs RS), lateral views 
+and joins.
+ 0. none : disable hive.fetch.task.conversion
+ 1. minimal : SELECT STAR, FILTER on partition columns, LIMIT 
+only
+ 2. more : SELECT, FILTER, LIMIT only (support TABLESAMPLE and 
+virtual columns)
+ </description>
+ </property
+~~~
+
+#### 9.2 本地模式
+
+大多数Hadoop Job是需要Hadoop提供完整的可扩展性来处理大数据集的，不过，有时hive的输入数据量都是非常小的，在这种情况下，为查询触发执行任务消耗的时间可能比实际的job的执行时间要多的多，对于大多数这种情况，hive可以通过本地模式在单台机器处理所有的任务。对于小数据集，执行时间可以明显被缩短。
+
+用户可以通过设置hvie.exec.mode.local.auto 的值设为true,来让hive在适当的时候自动启动这个优化。
+
+~~~mysql
+set hive.exec.mode.local.auto=true; -- 开启本地mr
+# 设置local mr 的最大输入数据量，当输入数据量小于这个值的时候采用local mr的方式方式默认是134217728,28M
+set hive.exec.mode.local.auto.inputbytes.max=50000000;
+# 设置local mr 的最大输入文件个数，当输入文件小于这个值的时候采用local mr 的方式。默认为4
+set hive.exec.mode.local.auto.input.files.max=10;
+
+# 开启本地模式，并执行查询语句
+hive (default)> set hive.exec.mode.local.auto=true;
+hive (default)> select * from emp cluster by deptno;
+Time taken: 1.328 seconds, Fetched: 14 row(s)
+# 关闭本地模式，并执行查询语句
+hive (default)> set hive.exec.mode.local.auto=false;
+hive (default)> select * from emp cluster by deptno;
+Time taken: 20.09 seconds, Fetched: 14 row(s)
+~~~
+
+
+
+#### 9.3 表的优化
+
+1. 小表、大表Join
+
+   将key相对分散，并且数据量小的表放在join的左边，这样可以有效减少内存溢出的错误发生的几率；在进一步，可以使用map join 让小的维度表（1000条一下的记录条数）先进内存，在map端完成reduce.
+
+   实际测试发现：新版的 hive 已经对小表 JOIN 大表和大表 JOIN 小表进行了优化。小表
+   放在左边和右边已经没有明显区别。
+
+   关闭 mapjoin 功能默认是打开的）
+
+   ~~~msql
+   set hive.auto.convert.join = false;
+   ~~~
+
+2. 大表Join大表
+
+   * 空key过滤
+
+     有时join超时是因为key对应的数据太多，而相同key对应的数据都会发送相同的reduce上，从而导致内存不够，此时我们应该仔细分析这些异常的key，很多情况下，这些key对应的数据是异常数据，我们需要在sql进行过滤。例如key对应的字段为空，操作如下：
+
+     ~~~xml
+     # 配置历史服务器 mapred-site.xml
+     <property>
+     <name>mapreduce.jobhistory.address</name>
+     <value>hadoop102:10020</value>
+     </property>
+     <property>
+      <name>mapreduce.jobhistory.webapp.address</name>
+      <value>hadoop102:19888</value>
+     </property>
+     # 启动历史服务器
+     sbin/mr-jobhistory-daemon.sh start historyserver
+     ~~~
+
+     查看jobhistory
+
+     http://hadoop102:19888/jobhistory
+
+   * 空key转换
+
+     有时虽然某个key为空对应的数据很多，但是相应的数据不是异常数据，必须包含在join的结果中，此时我们可以表a中key为空的字段赋予一个随机的值，使得数据随机均匀的分到不同的reduce上。
+
+     **不随机分布空null值**
+
+     ~~~mysql
+     
+     # 设置5个reduce个数
+     set mapreduce.jab.reduces=5;
+     # join两张表
+     insert overwrite table jointable
+     select n.* from nulltable n left join ori b on n.id = b.id
+     ~~~
+
+     结果：可以看出，出现了数据倾斜，某些reducer的资源消耗远大于其他reducer
+
+     ![image-20210823100938757](pic/image-20210823100938757.png)
+
+     **随机分布空null值**
+
+     ~~~mysql
+     # 设置5个reduce 个数
+     set mapreduce.job.reduce = 5;
+     # JOIN 两张表
+     insert overwrite table jointable
+     select n.* from nullidtable n full join ori o on case when n.id is null then concat('hive', rand()) else n.id end = o.id;
+     ~~~
+
+     结果： 可以看出来，消除了数据倾斜，负载均衡reducer的资源消耗
+
+     ![image-20210823101552672](pic/image-20210823101552672.png)
+
+3. MapJoin
+
+   如果不指定mapjoin 或者 不符合MapJoin的条件，那么hive解析器会将Join操作转换成common join ，即：在Reduce阶段完成join，容易发生数据倾斜。可以用MapJoin把小表全部加载到内存在map端进行join，避免reducer处理。
+
+   ~~~mysql
+   # 开启MapJoin参数设置
+   set hive.auto.convert.join = true;默认true
+   # 大表小表的阀值设置（默认25m一下是小表）
+   set hive.mapjoin.samlltable.filesize=2500000;
+   
+   ~~~
+
+   MapJon工作机制：
+
+   ![image-20210823102116843](pic/image-20210823102116843.png)
 
 
 
